@@ -97,13 +97,13 @@
   // Running raw `wrangler deploy` against another account? DELETE this block —
   // the id lives in OpenSEO's account and the deploy fails without access to
   // it. (Alchemy deploys and the Docker image never read it.)
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "9d64ccfb559f44449ce52a143912f898",
-      "localConnectionString": "postgres://openseo:openseo@localhost:5433/openseo",
-    },
-  ],
+  //"hyperdrive": [
+  //  {
+  //    "binding": "HYPERDRIVE",
+  //    "id": "9d64ccfb559f44449ce52a143912f898",
+  //   "localConnectionString": "postgres://openseo:openseo@localhost:5433/openseo",
+  //  },
+  //],
   "r2_buckets": [
     {
       "bucket_name": "open-seo",
