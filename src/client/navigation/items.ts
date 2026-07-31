@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  BadgeDollarSign,
   Bot,
   ClipboardCheck,
   Globe,
@@ -17,6 +18,13 @@ const projectNavItems = [
     to: "/p/$projectId/keywords" as const,
     label: "Keyword Research",
     icon: Search,
+  },
+  // PERSONAL_GOOGLE_ADS_EXTENSION: keep this optional tool isolated from the
+  // upstream keyword research route for straightforward OpenSEO rebases.
+  {
+    to: "/p/$projectId/google-ads-planner" as const,
+    label: "Google Ads Planner",
+    icon: BadgeDollarSign,
   },
   {
     to: "/p/$projectId/saved" as const,
@@ -94,6 +102,7 @@ export function getProjectNavGroups(projectId: string) {
       label: "Research",
       items: [
         byPath("/p/$projectId/keywords"),
+        byPath("/p/$projectId/google-ads-planner"),
         byPath("/p/$projectId/domain"),
         byPath("/p/$projectId/backlinks"),
         byPath("/p/$projectId/brand-lookup"),
