@@ -86,4 +86,72 @@ describe("createGoogleAdsRestClient", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
     expect(sleep).toHaveBeenCalledTimes(1);
   });
+
+  it("logs sanitized Google Ads error details without credentials", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ access_token: "access-token" }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              message: "The caller does not have permission",
+              status: "PERMISSION_DENIED",
+              details: [
+                {
+                  requestId: "request-123",
+                  errors: [
+                    {
+                      errorCode: {
+                        authorizationError: "USER_PERMISSION_DENIED",
+                      },
+                      message: "User doesn't have permission.",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const client = createGoogleAdsRestClient(config, { fetcher });
+
+    try {
+      await expect(
+        client.generateKeywordIdeas({
+          keywords: ["seo"],
+          language: "languageConstants/1000",
+          geoTargetConstants: ["geoTargetConstants/2826"],
+          pageSize: 100,
+        }),
+      ).rejects.toMatchObject({
+        kind: "permission",
+        status: 403,
+        requestId: "request-123",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: "google_ads_api_error",
+          httpStatus: 403,
+          status: "PERMISSION_DENIED",
+          errorCode: "USER_PERMISSION_DENIED",
+          message: "User doesn't have permission.",
+          requestId: "request-123",
+        }),
+      );
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
+        "developer-token",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });

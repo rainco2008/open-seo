@@ -13,6 +13,37 @@ https://app.openseo.so/mcp
 
 The first connection sends you through OpenSEO login. After authorization, your MCP client can call OpenSEO tools with the project context and account scopes you approved.
 
+## Bearer token authentication
+
+MCP clients authenticate with an OAuth access token. Do not create or hard-code a
+Bearer Token in the repository. Add the MCP URL to the client, complete the
+OpenSEO/Cloudflare Access login and consent flow, and let the client store and
+send the token automatically:
+
+```http
+Authorization: Bearer <oauth_access_token>
+```
+
+For a self-hosted Worker protected by Cloudflare Access, enable **Managed OAuth**
+for the Access application and allow the callback URLs used by the MCP client
+(including localhost callbacks for CLI and desktop clients). The MCP endpoint
+returns `401 Unauthorized` with `Missing or invalid access token` until the
+OAuth flow has completed; this confirms the endpoint is reachable, not that it
+is offline.
+
+To test an already-authorized client request, pass its access token without
+printing or committing it:
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://YOUR_WORKER_HOSTNAME/mcp" `
+  -Headers @{ Authorization = "Bearer $env:OPENSEO_MCP_TOKEN" }
+```
+
+Never commit `$env:OPENSEO_MCP_TOKEN`, an OAuth refresh token, or any token value
+to source control. If authorization becomes invalid, disconnect the MCP server
+in the client, add it again, and repeat the login flow.
+
 For the most current setup UI and a copyable endpoint, open [AI & MCP in OpenSEO](https://app.openseo.so/ai).
 
 ## Claude Code
