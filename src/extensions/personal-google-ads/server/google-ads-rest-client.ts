@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { PersonalGoogleAdsConfig } from "../config";
 import {
   googleHistoricalMetricsResponseSchema,
@@ -16,6 +17,47 @@ type RestClientDependencies = {
 };
 
 const MAX_ATTEMPTS = 3;
+
+const googleAdsErrorResponseSchema = z.object({
+  error: z.object({
+    message: z.string().optional(),
+    status: z.string().optional(),
+    details: z
+      .array(
+        z.object({
+          requestId: z.string().optional(),
+          errors: z
+            .array(
+              z.object({
+                message: z.string().optional(),
+                errorCode: z.record(z.string(), z.string()).optional(),
+              }),
+            )
+            .optional(),
+        }),
+      )
+      .optional(),
+  }),
+});
+
+function parseGoogleAdsError(payload: unknown) {
+  const parsed = googleAdsErrorResponseSchema.safeParse(payload);
+  if (!parsed.success) return {};
+
+  const details = parsed.data.error.details ?? [];
+  const failure = details.find((detail) => detail.errors?.length);
+  const firstError = failure?.errors?.[0];
+  const errorCode = firstError?.errorCode
+    ? Object.values(firstError.errorCode).find(Boolean)
+    : undefined;
+
+  return {
+    status: parsed.data.error.status,
+    errorCode,
+    message: firstError?.message ?? parsed.data.error.message,
+    requestId: details.find((detail) => detail.requestId)?.requestId,
+  };
+}
 
 function defaultSleep(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -77,9 +119,12 @@ export function createGoogleAdsRestClient(
         );
       }
 
-      const requestId = response.headers.get("request-id") ?? undefined;
       const payload: unknown = await response.json().catch(() => null);
       if (response.ok) return payload;
+
+      const parsedError = parseGoogleAdsError(payload);
+      const requestId =
+        response.headers.get("request-id") ?? parsedError.requestId;
 
       // A 401 gets one fresh-token retry. Quota and transient upstream errors
       // get the full bounded backoff window.
@@ -91,6 +136,17 @@ export function createGoogleAdsRestClient(
         await sleep(retryDelay(response, attempt, random));
         continue;
       }
+
+      console.error(
+        JSON.stringify({
+          event: "google_ads_api_error",
+          httpStatus: response.status,
+          status: parsedError.status,
+          errorCode: parsedError.errorCode,
+          message: parsedError.message,
+          requestId,
+        }),
+      );
 
       throw new GoogleAdsApiError(
         classifyError(response.status),

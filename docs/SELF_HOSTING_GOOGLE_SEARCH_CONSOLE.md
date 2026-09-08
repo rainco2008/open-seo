@@ -69,8 +69,36 @@ openssl rand -base64 32
 Where to set them:
 
 - **Docker self-hosting:** `.env`
-- **Cloudflare:** the Workers dashboard (as secrets)
+- **Cloudflare Workers:** the Worker dashboard under **Settings → Variables and Secrets**,
+  or Wrangler using the commands below
 - **Local development:** `.env.local`
+
+### Cloudflare Workers with Wrangler
+
+For a Wrangler-managed deployment, set the values interactively so secrets do
+not appear in shell history or source control:
+
+```bash
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+wrangler secret put BETTER_AUTH_SECRET
+```
+
+Enter the corresponding value when Wrangler prompts for it. `GOOGLE_CLIENT_ID`
+is not confidential, but storing all three values as Worker secrets keeps the
+deployment procedure consistent. Do not commit any of these values to
+`wrangler.jsonc`, `.env` files, or project documentation.
+
+If the values are managed in the Cloudflare dashboard, use the same variable
+names. When deploying with Wrangler afterward, preserve dashboard-managed
+variables with:
+
+```bash
+wrangler deploy --keep-vars
+```
+
+The OAuth callback URL must use the public hostname served by the Worker:
+`https://your-openseo-domain.com/api/gsc/oauth/callback`.
 
 ## 5) Restart and connect
 
