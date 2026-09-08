@@ -43,6 +43,7 @@ export function SearchTabStrip({
     <div className="rounded-xl border border-base-300 bg-base-100 p-1">
       <div
         role="tablist"
+        aria-label="Search tabs"
         className="flex min-w-0 items-stretch gap-1 overflow-x-auto"
       >
         {tabs.map((tab) => {
@@ -192,7 +193,7 @@ function getSearchTabQueryConfig(
         "domain-overview",
         projectId,
         trimmedDomain,
-        input.subdomains,
+        input.scope,
         input.locationCode,
       ],
       queryFn: () =>
@@ -200,7 +201,7 @@ function getSearchTabQueryConfig(
           data: {
             projectId,
             domain: trimmedDomain,
-            includeSubdomains: input.subdomains,
+            scope: input.scope,
             locationCode: input.locationCode,
           },
         }),

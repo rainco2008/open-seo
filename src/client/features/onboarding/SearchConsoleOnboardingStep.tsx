@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleGlyph } from "@/client/features/gsc/GoogleGlyph";
+import { GoogleLinkErrorAlert } from "@/client/features/integrations/GoogleLinkErrorAlert";
 import { SelfHostedSetupWarning } from "@/client/features/gsc/SelfHostedSetupWarning";
 import {
   SitePicker,
   type GscSiteSelection,
 } from "@/client/features/gsc/SitePicker";
-import { startGscLink } from "@/client/features/gsc/startGscLink";
+import { startGoogleLink } from "@/client/features/integrations/startGoogleLink";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { ProjectMarketFields } from "@/client/features/projects/ProjectMarketFields";
@@ -44,7 +45,7 @@ export function SearchConsoleOnboardingStep() {
 
         {project ? <GscConnect projectId={project.id} /> : <Checking />}
 
-        <p className="text-xs leading-relaxed text-base-content/55">
+        <p className="hidden sm:block text-xs leading-relaxed text-base-content/55">
           For now, Search Console data flows through the OpenSEO MCP. We're
           building it into the OpenSEO app soon too.
         </p>
@@ -89,8 +90,12 @@ function DefaultMarketPicker({
 
   return (
     <div className="space-y-2">
-      <ProjectMarketFields value={market} onChange={handleChange} />
-      <p className="text-xs leading-relaxed text-base-content/55">
+      <ProjectMarketFields
+        value={market}
+        onChange={handleChange}
+        hideLanguageOnMobile
+      />
+      <p className="hidden sm:block text-xs leading-relaxed text-base-content/55">
         We'll use this country and language for keyword, SERP, and domain data
         unless you pick a different one. You can change it in project settings.
       </p>
@@ -150,7 +155,7 @@ function GscConnect({ projectId }: { projectId: string }) {
 
   const handleConnect = () => {
     captureClientEvent("onboarding:gsc_connect_clicked");
-    void startGscLink(window.location.href);
+    void startGoogleLink("gsc", window.location.href);
   };
 
   if (connectionQuery.isLoading) return <Checking />;
@@ -174,29 +179,35 @@ function GscConnect({ projectId }: { projectId: string }) {
 
   if (hasGrant) {
     return (
-      <SitePicker
-        loading={sitesQuery.isLoading}
-        error={sitesQuery.isError}
-        accounts={accounts}
-        selection={selection}
-        onSelect={setSelection}
-        onSave={() => selection && setSiteMutation.mutate(selection)}
-        saving={setSiteMutation.isPending}
-        onRetry={() => void sitesQuery.refetch()}
-        onReconnect={handleConnect}
-      />
+      <div className="space-y-4">
+        <GoogleLinkErrorAlert provider="gsc" />
+        <SitePicker
+          loading={sitesQuery.isLoading}
+          error={sitesQuery.isError}
+          accounts={accounts}
+          selection={selection}
+          onSelect={setSelection}
+          onSave={() => selection && setSiteMutation.mutate(selection)}
+          saving={setSiteMutation.isPending}
+          onRetry={() => void sitesQuery.refetch()}
+          onReconnect={handleConnect}
+        />
+      </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleConnect}
-      className="inline-flex items-center gap-2.5 rounded-lg border border-base-300 bg-base-100 px-4 py-2.5 text-sm font-semibold text-base-content shadow-sm transition hover:bg-base-200 hover:shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-    >
-      <GoogleGlyph className="size-[18px]" />
-      Connect with Google
-    </button>
+    <div className="space-y-4">
+      <GoogleLinkErrorAlert provider="gsc" />
+      <button
+        type="button"
+        onClick={handleConnect}
+        className="inline-flex items-center gap-2.5 rounded-lg border border-base-300 bg-base-100 px-4 py-2.5 text-sm font-semibold text-base-content shadow-sm transition hover:bg-base-200 hover:shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <GoogleGlyph className="size-[18px]" />
+        Connect with Google
+      </button>
+    </div>
   );
 }
 

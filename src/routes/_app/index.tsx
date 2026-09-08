@@ -40,7 +40,7 @@ function IndexRedirect() {
     }
 
     void navigate({
-      to: "/p/$projectId/keywords",
+      to: "/p/$projectId",
       params: { projectId: (target ?? data[0]).id },
     });
   }, [data, navigate]);
@@ -76,7 +76,7 @@ function IndexRedirect() {
       return (
         <div className="flex items-center justify-center h-full p-4">
           <UnauthenticatedErrorCard
-            message="Please sign in to access your OpenSEO workspace."
+            message="Please sign in to access your OpenSEO organization."
             onRetry={() => {
               void refetch();
             }}

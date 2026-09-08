@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -340,6 +341,71 @@ export const rankSnapshots = pgTable(
       table.runId,
       table.trackingKeywordId,
       table.device,
+    ),
+  ],
+);
+
+// Dashboard activation milestones. Organization-scoped: MCP OAuth grants are
+// user-level, so any member connecting an external MCP client satisfies the
+// milestone for the whole organization. Timestamps are first-occurrence only
+// and never move once set.
+export const organizationActivationState = pgTable(
+  "organization_activation_state",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    firstMcpAuthorizedAt: timestampColumn("first_mcp_authorized_at"),
+    firstMcpToolCallAt: timestampColumn("first_mcp_tool_call_at"),
+    updatedAt: timestampColumn("updated_at").notNull().default(isoNow),
+  },
+);
+
+// Per-project state for the dashboard's onboarding checklist. Most steps
+// complete via real product state (projects.domain, gsc_connections, MCP
+// activation); the competitor step completes on click-through.
+export const projectActivationState = pgTable("project_activation_state", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  competitorStepClickedAt: timestampColumn("competitor_step_clicked_at"),
+  // "I already connected" on the MCP card: hides the card for this project
+  // without faking the org-level first-tool-call milestone, which stays
+  // truthful and self-heals when a real external call lands.
+  mcpCardDismissedAt: timestampColumn("mcp_card_dismissed_at"),
+  // Optional integration pitch: hiding it from the dashboard does not remove
+  // the GA4 connection controls from Project Settings.
+  ga4CardDismissedAt: timestampColumn("ga4_card_dismissed_at"),
+  updatedAt: timestampColumn("updated_at").notNull().default(isoNow),
+});
+
+// Point-in-time backlink profile summaries for the project's own domain,
+// written by the dashboard's visit-triggered refresh. DataForSEO's summary
+// already carries new/lost counts, so one snapshot renders a full card;
+// rows accumulate into history for future trend views. The domain is stored
+// per row so a later project-domain change doesn't rewrite history.
+export const backlinkSnapshots = pgTable(
+  "backlink_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    domain: text("domain").notNull(),
+    rank: integer("rank"),
+    backlinks: bigint("backlinks", { mode: "number" }),
+    referringDomains: bigint("referring_domains", { mode: "number" }),
+    brokenBacklinks: bigint("broken_backlinks", { mode: "number" }),
+    newBacklinks: bigint("new_backlinks", { mode: "number" }),
+    lostBacklinks: bigint("lost_backlinks", { mode: "number" }),
+    newReferringDomains: bigint("new_referring_domains", { mode: "number" }),
+    lostReferringDomains: bigint("lost_referring_domains", { mode: "number" }),
+    capturedAt: timestampColumn("captured_at").notNull().default(isoNow),
+  },
+  (table) => [
+    index("backlink_snapshots_project_captured_idx").on(
+      table.projectId,
+      table.capturedAt,
     ),
   ],
 );

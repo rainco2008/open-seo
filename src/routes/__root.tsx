@@ -12,6 +12,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { AutumnProvider } from "autumn-js/react";
 import * as React from "react";
 import { DefaultCatchBoundary } from "@/client/components/DefaultCatchBoundary";
+import { captureGoogleLinkError } from "@/client/features/integrations/googleLinkError";
 import { ExportToSheetsModal } from "@/client/components/table/ExportToSheetsModal";
 import { themePreferenceInitScript } from "@/client/lib/theme";
 import {
@@ -20,13 +21,6 @@ import {
   startAnalyticsCapture,
   stopAnalyticsCapture,
 } from "@/client/lib/posthog";
-import {
-  captureRedditAttributionFromLocation,
-  getStoredRedditAttribution,
-  hasMarkedRedditSignupConversion,
-  markRedditSignupConversion,
-  unmarkRedditSignupConversion,
-} from "@/client/lib/reddit-attribution";
 import { NotFound } from "@/client/components/NotFound";
 import appCss from "@/client/styles/app.css?url";
 import { useSession } from "@/lib/auth-client";
@@ -34,7 +28,10 @@ import { isHostedClientAuthMode } from "@/lib/auth-mode";
 import { Toaster } from "sonner";
 import { queryClient } from "@/client/tanstack-db";
 import { getActiveOrganizationId } from "@/lib/auth-session";
-import { captureRedditConversionEvent } from "@/serverFunctions/redditConversions";
+
+// Capture Google link error params before the router starts — a route loader
+// redirect would otherwise replace the URL and lose them. See googleLinkError.ts.
+captureGoogleLinkError();
 
 export const Route = createRootRoute({
   head: () => ({
@@ -108,11 +105,6 @@ function PostHogBootstrap() {
   const optedOut = session?.user?.analyticsOptedOut === true;
   const organizationId = getActiveOrganizationId(session);
   const previousUserIdRef = React.useRef<string | null>(null);
-  const redditSignupInFlightRef = React.useRef(false);
-
-  React.useEffect(() => {
-    captureRedditAttributionFromLocation();
-  }, []);
 
   React.useEffect(() => {
     if (!isHostedMode || isSessionPending) {
@@ -130,32 +122,6 @@ function PostHogBootstrap() {
       resetAnalyticsUser();
     }
   }, [isHostedMode, isSessionPending, optedOut, organizationId, userId]);
-
-  React.useEffect(() => {
-    if (!isHostedMode || isSessionPending || !userId) return;
-    if (hasMarkedRedditSignupConversion(userId)) return;
-
-    const attribution = getStoredRedditAttribution();
-    if (!attribution) return;
-    if (redditSignupInFlightRef.current) return;
-
-    redditSignupInFlightRef.current = true;
-    void captureRedditConversionEvent({
-      data: { attribution, eventType: "SIGN_UP" },
-    })
-      .then((result) => {
-        if (result.status === "sent" || result.status === "already_sent") {
-          markRedditSignupConversion(userId);
-        }
-      })
-      .catch(() => {
-        // The server deduplicates this event; allow a future session to retry.
-        unmarkRedditSignupConversion();
-      })
-      .finally(() => {
-        redditSignupInFlightRef.current = false;
-      });
-  }, [isHostedMode, isSessionPending, userId]);
 
   return null;
 }

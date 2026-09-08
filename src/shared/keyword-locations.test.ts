@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 import { describe, expect, it } from "vitest";
 import {
   LABS_LOCATION_OPTIONS,
@@ -9,6 +10,7 @@ import {
   isLabsLocationCode,
   isSupportedLanguageCode,
   isSupportedLocationCode,
+  resolveKeywordDataLanguage,
   resolveLabsMarket,
   resolveMarket,
 } from "./keyword-locations";
@@ -62,7 +64,7 @@ describe("keyword locations", () => {
 
   it("keeps the picker sorted alphabetically with unique codes", () => {
     const labels = LOCATION_OPTIONS.map((option) => option.label);
-    expect(labels).toEqual(labels.toSorted((a, b) => a.localeCompare(b)));
+    expect(labels).toEqual(sort(labels, (a, b) => a.localeCompare(b)));
     const codes = LOCATION_OPTIONS.map((option) => option.code);
     expect(new Set(codes).size).toBe(codes.length);
   });
@@ -167,5 +169,18 @@ describe("resolveLabsMarket", () => {
         { locationCode: 2704, languageCode: "vi" },
       ),
     ).toMatchObject({ locationCode: 2352 });
+  });
+});
+
+describe("resolveKeywordDataLanguage", () => {
+  it("keeps a language the country's keyword data serves", () => {
+    expect(resolveKeywordDataLanguage(2840, "es")).toBe("es");
+  });
+
+  it("falls back to the country default for a SERP-only pair", () => {
+    // Rank tracking can track English in Czechia; Labs would charge and fail.
+    expect(resolveKeywordDataLanguage(2203, "en")).toBe("cs");
+    // Google-Ads countries keep their single default too.
+    expect(resolveKeywordDataLanguage(2352, "en")).toBe("is");
   });
 });
