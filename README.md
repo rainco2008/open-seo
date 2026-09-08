@@ -3,20 +3,20 @@
 > 面向个人、团队和 AI Agent 的开源 SEO 工作台。
 
 > [!IMPORTANT]
-> 本仓库是 **OpenSEO 的本地自托管项目**。默认在本机运行，应用地址为
-> `http://localhost:3001`，MCP 地址为 `http://localhost:3001/mcp`。
-> `openseo.so` 是上游官方托管服务，Cloudflare 部署只是可选方案，都不是本仓库当前的默认运行环境。
+> 本仓库是 **部署在 Cloudflare 上的 OpenSEO 自托管项目**。当前生产应用为
+> `https://openseo.steer.workers.dev`，生产 MCP 端点为
+> `https://openseo.steer.workers.dev/mcp`。本地运行只用于开发和测试，不是当前生产部署方式。
 
 OpenSEO 是一个可自托管的 SEO 数据与工作流平台，定位为 Semrush、Ahrefs 等商业 SEO 套件的开源替代方案。它把关键词研究、排名跟踪、竞争对手分析、反向链接、网站审计、Google Search Console 和 AI 搜索可见性整合在同一个项目空间中，并通过 MCP 将这些能力提供给 Claude Code、Codex、OpenClaw 等 AI Agent。
 
-项目本身免费且开源；SEO 数据主要通过 DataForSEO 获取，相关费用由 DataForSEO 按用量收取。本仓库优先支持本地运行，也保留 Docker 和 Cloudflare 部署能力。
+项目本身免费且开源；SEO 数据主要通过 DataForSEO 获取，相关费用由 DataForSEO 按用量收取。本仓库的生产环境运行在 Cloudflare Workers，本地 Vite/Docker 环境用于开发、测试和故障排查。
 
 ## 项目状态
 
 - 当前版本：`0.0.28`（以 `package.json` 为准）
-- 当前部署方式：本地自托管
-- 当前应用入口：`http://localhost:3001`
-- 当前 MCP 入口：`http://localhost:3001/mcp`
+- 当前部署方式：Cloudflare 自托管
+- 当前生产应用：[openseo.steer.workers.dev](https://openseo.steer.workers.dev)
+- 当前生产 MCP：[openseo.steer.workers.dev/mcp](https://openseo.steer.workers.dev/mcp)
 - 默认数据库：Cloudflare D1（SQLite）
 - 可选数据库：PostgreSQL（通过 Hyperdrive/Alchemy 部署路径）
 - 默认外部 SEO 数据源：DataForSEO
@@ -49,7 +49,7 @@ OpenSEO 是一个可自托管的 SEO 数据与工作流平台，定位为 Semrus
 
 ## 使用方式
 
-### 本地自托管（本仓库的默认方式）
+### 本地运行（仅用于开发和测试）
 
 Docker 模式默认使用 `local_noauth`，仅适合本机、私有网络或已经由其他认证层保护的环境。不要直接把它暴露到公网。
 
@@ -73,9 +73,9 @@ docker compose down
 
 ### 上游官方托管版
 
-官方提供的托管服务是 [openseo.so](https://openseo.so)。它与本仓库在本机运行的实例相互独立。
+官方提供的托管服务是 [openseo.so](https://openseo.so)。它与本仓库部署在 Cloudflare 上的实例相互独立。
 
-### Cloudflare 自托管
+### Cloudflare 自托管（本仓库的当前生产方式）
 
 Cloudflare 部署适合需要公网访问、多用户和团队协作的场景。部署资源包括 Worker、D1、KV、R2、Durable Objects 和 Workflows；生产/预览资源由 Alchemy 管理，普通本地开发和 Docker 使用根目录的 `wrangler.jsonc`。
 
@@ -83,7 +83,7 @@ Cloudflare 部署适合需要公网访问、多用户和团队协作的场景。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rainco2008/open-seo)
 
-部署后需要在 Cloudflare 中启用 Access，并设置 `TEAM_DOMAIN`、`POLICY_AUD` 和 `DATAFORSEO_API_KEY`。如果使用 MCP，还要开启 Access Managed OAuth。这是可选的远程部署方式，不是本仓库当前的默认运行环境。详细步骤见 [`docs/SELF_HOSTING_CLOUDFLARE.md`](./docs/SELF_HOSTING_CLOUDFLARE.md)。
+部署后需要在 Cloudflare 中启用 Access，并设置 `TEAM_DOMAIN`、`POLICY_AUD` 和 `DATAFORSEO_API_KEY`。如果使用 MCP，还要开启 Access Managed OAuth。当前生产实例为 [openseo.steer.workers.dev](https://openseo.steer.workers.dev)。详细步骤见 [`docs/SELF_HOSTING_CLOUDFLARE.md`](./docs/SELF_HOSTING_CLOUDFLARE.md)。
 
 ## 本地开发
 
@@ -285,13 +285,13 @@ scripts/                数据修复、成本分析、发布等脚本
 
 ## MCP
 
-本地运行时，MCP 端点为：
+当前 Cloudflare 生产环境的 MCP 端点为：
 
 ```text
-http://localhost:3001/mcp
+https://openseo.steer.workers.dev/mcp
 ```
 
-只有在选择 Cloudflare 等远程部署方式时，才使用 `https://<你的 OpenSEO 域名>/mcp`。
+本地开发时使用 `http://localhost:3001/mcp`；部署到其他 Cloudflare 域名时使用 `https://<你的 OpenSEO 域名>/mcp`。
 
 MCP 工具可以列出项目、研究关键词、查询 SERP、查看域名概览和反链、读取/保存关键词、读取排名跟踪、运行网站审计，并在配置后读取 Google Search Console 数据。使用 Cloudflare 自托管时，先在 Access 应用中启用 Managed OAuth，再在 Agent 客户端中连接上述地址。
 
