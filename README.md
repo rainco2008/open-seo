@@ -13,7 +13,7 @@ OpenSEO 是一个可自托管的 SEO 数据与工作流平台，定位为 Semrus
 
 ## 项目状态
 
-- 当前版本：`0.0.28`（以 `package.json` 为准）
+- 当前版本：`0.1.7`（以 `package.json` 为准）
 - 当前部署方式：Cloudflare 自托管
 - 当前生产应用：[openseo.steer.workers.dev](https://openseo.steer.workers.dev)
 - 当前生产 MCP：[openseo.steer.workers.dev/mcp](https://openseo.steer.workers.dev/mcp)
@@ -197,10 +197,10 @@ pnpm deploy:postgres
 默认 D1 生产部署使用：
 
 ```bash
-pnpm db:migrate:prod
-pnpm build
-pnpm exec wrangler deploy
+pnpm deploy
 ```
+
+该命令会先应用 D1 迁移和构建应用，再依次部署独立的 Audit Worker 与主 Worker。
 
 首次或高风险生产变更前，应先阅读生产段落、执行 Alchemy dry-run、核对现有 Worker Secrets 与 `.env.production` 的完整变量集合，并确认迁移记录。Alchemy 部署会替换完整 binding/secret 集合，环境文件缺少的可选变量可能会以空值部署，从而静默关闭对应集成。
 

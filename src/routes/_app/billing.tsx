@@ -1,17 +1,21 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useCustomer } from "autumn-js/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { isHostedClientAuthMode } from "@/lib/auth-mode";
+import { useCanManageBilling } from "@/client/features/team/organizationQueries";
+import { captureClientEvent } from "@/client/lib/posthog";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
-import { getStoredRedditAttribution } from "@/client/lib/reddit-attribution";
+import { buildCheckoutSuccessUrl } from "@/client/features/billing/checkout-url";
 import { BillingUsageChart } from "@/client/features/billing/BillingUsageChart";
 import { BillingFeatureBreakdown } from "@/client/features/billing/BillingFeatureBreakdown";
 import { parseTopUpAmount } from "@/client/features/billing/HostedBillingContentUtils";
 import { getBillingRouteState } from "@/client/features/billing/route-state";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 import {
+  AUTUMN_CHECKOUT_SESSION_PARAMS,
   AUTUMN_PAID_PLAN_ID,
+  BILLING_ROUTE,
   AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
   LOW_CREDITS_THRESHOLD_USD,
   AUTUMN_SEO_DATA_CREDITS_PER_USD,
@@ -19,7 +23,6 @@ import {
   AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
   autumnSeoDataCreditsToUsd,
 } from "@/shared/billing";
-import { captureRedditConversionEvent } from "@/serverFunctions/redditConversions";
 
 export const Route = createFileRoute("/_app/billing")({
   beforeLoad: () => {
@@ -42,6 +45,10 @@ function BillingPage() {
     },
   });
 
+  // Subscription changes are owner-only; other members see balances but are
+  // pointed at the owner instead of checkout (the server enforces this too).
+  const canManageBilling = useCanManageBilling();
+
   const planStatus = getCustomerPlanStatus(customerQuery.data);
   const isFreePlan = planStatus === "free";
   const billingRouteState = getBillingRouteState({
@@ -63,20 +70,6 @@ function BillingPage() {
 
   const { isValid: isValidTopUp, parsed: parsedTopUpAmount } =
     parseTopUpAmount(topUpAmount);
-  const checkoutCompleted =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("checkout") === "success";
-
-  useEffect(() => {
-    if (!checkoutCompleted || billingRouteState !== "ready") return;
-
-    const attribution = getStoredRedditAttribution();
-    if (!attribution) return;
-
-    void captureRedditConversionEvent({
-      data: { attribution, eventType: "PURCHASE" },
-    });
-  }, [billingRouteState, checkoutCompleted]);
 
   if (billingRouteState === "loading") {
     return null;
@@ -103,6 +96,16 @@ function BillingPage() {
         </button>
       </div>
     );
+  }
+
+  function startUpgradeCheckout() {
+    captureClientEvent("billing:checkout_start");
+    return customerQuery.attach({
+      planId: AUTUMN_PAID_PLAN_ID,
+      redirectMode: "always",
+      successUrl: buildCheckoutSuccessUrl(BILLING_ROUTE),
+      checkoutSessionParams: AUTUMN_CHECKOUT_SESSION_PARAMS,
+    });
   }
 
   async function runAction(
@@ -178,7 +181,12 @@ function BillingPage() {
             </span>
           </div>
 
-          {isFreePlan ? (
+          {!canManageBilling ? (
+            <p className="border-t border-base-300 pt-3 text-sm text-base-content/60">
+              Only the organization owner can change the plan or buy credits.
+              Ask them if you need more.
+            </p>
+          ) : isFreePlan ? (
             <div className="space-y-3 border-t border-base-300 pt-3">
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-sm font-medium">Base Plan</span>
@@ -207,12 +215,7 @@ function BillingPage() {
                 disabled={isPending}
                 onClick={() =>
                   void runAction(
-                    () =>
-                      customerQuery.attach({
-                        planId: AUTUMN_PAID_PLAN_ID,
-                        redirectMode: "always",
-                        successUrl: `${window.location.origin}${window.location.pathname}?checkout=success`,
-                      }),
+                    startUpgradeCheckout,
                     "We couldn't start the checkout. Please try again.",
                   )
                 }
@@ -239,8 +242,8 @@ function BillingPage() {
           )}
         </div>
 
-        {/* Buy credits card — paid plan only */}
-        {!isFreePlan ? (
+        {/* Buy credits card — paid plan only, owner-only */}
+        {!isFreePlan && canManageBilling ? (
           <div className="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
             <div>
               <span className="font-semibold">Buy credits</span>
@@ -281,6 +284,7 @@ function BillingPage() {
                       planId: AUTUMN_SEO_DATA_TOP_UP_PLAN_ID,
                       redirectMode: "always",
                       successUrl: window.location.href,
+                      checkoutSessionParams: AUTUMN_CHECKOUT_SESSION_PARAMS,
                       featureQuantities: [
                         {
                           featureId: AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,

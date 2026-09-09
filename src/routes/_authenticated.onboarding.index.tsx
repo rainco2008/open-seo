@@ -21,6 +21,10 @@ const clampStep = (step: number) =>
   Math.min(Math.max(0, Math.trunc(step)), ONBOARDING_LAST_STEP);
 
 export const Route = createFileRoute("/_authenticated/onboarding/")({
+  // The app renders inside ClientOnly, and this guard reads account-scoped data
+  // through a module-scoped query client. Keep it out of server requests so one
+  // worker isolate cannot reuse another account's cached onboarding state.
+  ssr: false,
   // Step lives in the URL so it survives refresh and works with back/forward.
   validateSearch: (search: Record<string, unknown>): { step: number } => {
     const raw = Number(search.step);
@@ -81,10 +85,7 @@ function OnboardingFlow({
   const [answers, setAnswers] = useState<OnboardingAnswers>(initialAnswers);
 
   const saveMutation = useMutation({
-    mutationFn: (extra: {
-      mcpSetupIntent?: "yes" | "no";
-      completed?: boolean;
-    }) =>
+    mutationFn: (extra: { completed?: boolean }) =>
       saveOnboardingAnswers({
         data: buildOnboardingPayload(answers, step, extra),
       }),
@@ -113,9 +114,9 @@ function OnboardingFlow({
     goToStep(step + 1);
   };
 
-  const handleFinish = async (mcpSetupIntent: "yes" | "no") => {
+  const handleFinish = async () => {
     try {
-      await saveMutation.mutateAsync({ mcpSetupIntent, completed: true });
+      await saveMutation.mutateAsync({ completed: true });
       // Refresh the shared cache so the destination's onboarding-redirect guard
       // sees the completed state and doesn't bounce the user back here.
       await queryClient.invalidateQueries({ queryKey: ["onboardingAnswers"] });
@@ -126,13 +127,9 @@ function OnboardingFlow({
       interests: answers.selectedInterests,
       work_for: answers.workFor,
       source: answers.source,
-      wants_mcp_setup: mcpSetupIntent === "yes",
     });
-    if (mcpSetupIntent === "yes") {
-      void navigate({ to: "/ai", replace: true });
-    } else {
-      void navigate({ to: "/", replace: true });
-    }
+    // The dashboard's onboarding checklist owns MCP coaching now.
+    void navigate({ to: "/", replace: true });
   };
 
   return (

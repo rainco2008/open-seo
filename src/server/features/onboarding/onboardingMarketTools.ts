@@ -1,4 +1,5 @@
 import { tool, type ToolSet } from "ai";
+import { sort } from "remeda";
 import { z } from "zod";
 import { DomainService } from "@/server/features/domain/services/DomainService";
 import { BacklinksService } from "@/server/features/backlinks/services/BacklinksService";
@@ -36,7 +37,7 @@ export function marketTools(ctx: ToolContext): ToolSet {
             {
               projectId: project.id,
               domain,
-              includeSubdomains: false,
+              scope: "domain",
               locationCode: project.locationCode,
               languageCode: project.languageCode,
             },
@@ -87,7 +88,7 @@ export function marketTools(ctx: ToolContext): ToolSet {
                   .filter((item) => item.type === "organic")
                   .slice(0, 10)
                   .map((item) => ({
-                    rank: item.rank_absolute ?? item.rank_group ?? null,
+                    rank: item.rank_group ?? item.rank_absolute ?? null,
                     domain: item.domain ?? null,
                     title: item.title ?? null,
                     url: item.url ?? null,
@@ -132,9 +133,10 @@ export function marketTools(ctx: ToolContext): ToolSet {
             limit: 50,
             creditFeature: "onboarding",
           });
-          const top = competitors
-            .filter((c) => !isSameDomain(c.domain))
-            .toSorted((a, b) => (b.etv ?? 0) - (a.etv ?? 0))
+          const top = sort(
+            competitors.filter((c) => !isSameDomain(c.domain)),
+            (a, b) => (b.etv ?? 0) - (a.etv ?? 0),
+          )
             .slice(0, 10)
             .map((c) => ({
               domain: c.domain ?? null,
@@ -216,7 +218,7 @@ export function marketTools(ctx: ToolContext): ToolSet {
       execute: async ({ domain }) => {
         try {
           const { overview } = await BacklinksService.profileOverview(
-            { target: domain, scope: "domain" },
+            { target: domain, scope: "subdomains" },
             billingCustomer,
             "onboarding",
           );

@@ -7,6 +7,7 @@ import { resolveUserContextFromHeaders } from "@/middleware/ensure-user/resolve"
 import { ProjectRepository } from "@/server/features/projects/repositories/ProjectRepository";
 import { SamSessionRepository } from "@/server/features/sam/SamSessionRepository";
 import { runScheduledRankChecks } from "@/server/features/rank-tracking/services/scheduledRankChecks";
+import { reconcileStaleAudits } from "@/server/features/audit/services/auditReconciler";
 import { getOrCreateOrganizationCustomer } from "@/server/billing/subscription";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import { getAuthMode, isHostedAuthMode } from "@/lib/auth-mode";
@@ -22,6 +23,10 @@ import {
   AUTUMN_WEBHOOK_PATH,
   handleAutumnWebhookRequest,
 } from "@/server/billing/autumn-webhook";
+import { sweepDubReferredOrganizations } from "@/server/referrals/dub";
+import { maybeSendSelfHostHeartbeat } from "@/server/lib/self-host-telemetry";
+import { handleGdprStorageErasure } from "@/server/gdpr/storage-erasure";
+import { GDPR_STORAGE_ERASURE_PATH } from "@/shared/gdpr-erasure";
 
 const appFetch = createStartHandler(defaultStreamHandler);
 const openSeoOAuthProvider = createOpenSeoOAuthProvider(appFetch);
@@ -137,9 +142,15 @@ function handleFetch(
   env: Env,
   ctx: ExecutionContext,
 ): Response | Promise<Response> {
+  ctx.waitUntil(maybeSendSelfHostHeartbeat());
+
   const authMode = getAuthMode(env.AUTH_MODE);
   const publicRequest = requestWithPublicOrigin(request);
   const pathname = new URL(publicRequest.url).pathname;
+
+  if (pathname === GDPR_STORAGE_ERASURE_PATH) {
+    return handleGdprStorageErasure(publicRequest, env);
+  }
 
   if (pathname.startsWith("/agents/")) {
     return routeChatAgents(publicRequest, env);
@@ -167,22 +178,63 @@ function handleFetch(
   return appFetch(request);
 }
 
-// Export Workflow classes as named exports
-export { SiteAuditWorkflow } from "./server/workflows/SiteAuditWorkflow";
+// Export Workflow classes as named exports. SiteAuditWorkflow and the
+// AuditScratchpad DO live in the open-seo-audit aux worker
+// (src/audit-worker.ts); this worker reaches them via cross-script bindings.
 export { RankCheckWorkflow } from "./server/workflows/RankCheckWorkflow";
 // Durable Object class for the onboarding strategy chat (Agents SDK).
 export { OnboardingChatAgent } from "./server/features/onboarding/OnboardingChatAgent";
 // Durable Object class for the SAM in-app agent (Agents SDK).
 export { SamChatAgent } from "./server/features/sam/SamChatAgent";
 
+// Daily OAuth KV garbage collection; must match a trigger in wrangler.jsonc.
+const MCP_OAUTH_PURGE_CRON = "17 3 * * *";
+
 export default {
   fetch,
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     _ctx: ExecutionContext,
   ) {
+    if (controller.cron === MCP_OAUTH_PURGE_CRON) {
+      // Only hosted mode runs the OAuth provider (and has OAUTH_KV bound).
+      if (isHostedAuthMode(getAuthMode(env.AUTH_MODE))) {
+        const result = await openSeoOAuthProvider.purgeExpiredData(
+          env as OpenSeoOAuthEnv,
+        );
+        console.log("[mcp-oauth] purged expired OAuth data", result);
+        if (!result.done) {
+          // The sweep only advances past live records via deletions; a
+          // persistent incomplete scan means the keyspace outgrew the batch.
+          console.warn("[mcp-oauth] purge did not cover the full keyspace");
+        }
+
+        // Daily referral-sale sweep: catches paid Autumn invoices the
+        // billing.updated webhook path misses (renewals, one-time top-ups).
+        try {
+          await sweepDubReferredOrganizations();
+        } catch (err) {
+          console.error("[cron] Dub referral sale sweep failed:", err);
+        }
+      }
+      return;
+    }
+
+    // Watchdog first: reconcile audits stuck in "running" whose workflow died
+    // without reaching mark-failed (OOM/CPU kills, expired instances). Runs
+    // before the rank loop so a slow tick can't delay or starve it. Its
+    // failure is held until after the rank checks so it can't suppress them,
+    // then rethrown so the invocation still reports as failed.
+    let watchdogError: unknown;
+    try {
+      await withPgClient(() => reconcileStaleAudits());
+    } catch (err) {
+      watchdogError = err;
+      console.error("[cron] Stale-audit reconcile failed:", err);
+    }
     // Scope a per-request Postgres client for the cron run (no-op in D1 mode).
     await withPgClient(() => runScheduledRankChecks(env));
+    if (watchdogError) throw watchdogError;
   },
 };

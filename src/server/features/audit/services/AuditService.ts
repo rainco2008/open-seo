@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import {
   customerHasManagedAccess,
   customerHasPaidPlan,
+  getOrCreateOrganizationCustomer,
   type BillingCustomerContext,
 } from "@/server/billing/subscription";
 import { AuditRepository } from "@/server/features/audit/repositories/AuditRepository";
@@ -18,19 +19,27 @@ import {
   type AuditConfig,
   type LighthouseStrategy,
 } from "@/server/lib/audit/types";
-import { normalizeAndValidateStartUrl } from "@/server/lib/audit/url-policy";
+import {
+  normalizeAndValidateStartUrl,
+  resolveStartUrlRedirects,
+} from "@/server/lib/audit/url-policy";
+import { reconcileRunningAudit } from "@/server/features/audit/services/auditReconciler";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 
-// Plan-tier limits are the abuse bound in hosted mode: free accounts get one
-// small audit at a time, paid keeps the full limits, and customers with no
-// Autumn product at all are turned away. Self-hosted isn't gated.
+// Plan-tier limits are the abuse bound in hosted mode: free accounts get small
+// audits with a bounded burst, paid keeps the full limits, and customers with
+// no Autumn product at all are turned away. Self-hosted isn't gated.
 async function resolveAuditLimitTier(
-  organizationId: string,
+  customer: BillingCustomerContext,
 ): Promise<AuditLimitTier> {
-  if (!(await isHostedServerAuthMode())) return "paid";
+  if (!(await isHostedServerAuthMode())) return "self_hosted";
+  // An org minted outside a billing path (better-auth hooks, MCP auth) has no
+  // Autumn customer yet, and `check` 404s instead of reporting no access — a
+  // brand-new MCP user's first audit failed with a raw billing error.
+  await getOrCreateOrganizationCustomer(customer);
   const [hasManagedAccess, hasPaidPlan] = await Promise.all([
-    customerHasManagedAccess(organizationId),
-    customerHasPaidPlan(organizationId),
+    customerHasManagedAccess(customer.organizationId),
+    customerHasPaidPlan(customer.organizationId),
   ]);
   if (!hasManagedAccess) {
     throw new AppError("PAYMENT_REQUIRED", "Subscribe to run site audits");
@@ -61,7 +70,12 @@ async function startAudit(input: {
 
   const auditId = crypto.randomUUID();
   const config: AuditConfig = { maxPages, lighthouseStrategy };
-  const startUrl = await normalizeAndValidateStartUrl(input.startUrl);
+  // Anchor the audit to the site's real origin: a start domain that 301s
+  // elsewhere (…net -> …com, apex -> www) would otherwise dead-end after
+  // one page at the same-origin crawl boundary.
+  const startUrl = await resolveStartUrlRedirects(
+    await normalizeAndValidateStartUrl(input.startUrl),
+  );
 
   await AuditRepository.createAudit({
     id: auditId,
@@ -77,11 +91,14 @@ async function startAudit(input: {
   try {
     // Concurrency and capacity are enforced after the insert, not before: a
     // pre-insert read is a check-then-act race, so parallel requests would all
-    // pass the free tier's one-running-audit gate. Post-insert, each request
-    // sees at least its own row, so at most one racer can pass; the losers
-    // roll back via the catch below. Two true racers may both abort — the
-    // user just retries.
-    const usage = await AuditRepository.getAuditUsageForUser(input.actorUserId);
+    // pass the free tier's running-audits gate. Post-insert, each request sees
+    // at least its own row, so racers can't all slip under the limit; the
+    // losers roll back via the catch below. Racers at the boundary may all
+    // abort — the user just retries. Usage counts per ORGANIZATION, not per
+    // user: the free ceiling is the org's, so N members don't multiply it.
+    const usage = await AuditRepository.getAuditUsageForOrganization(
+      input.billingCustomer.organizationId,
+    );
     if (usage.runningCount > limits.maxRunningAudits) {
       throw new AppError("AUDIT_ALREADY_RUNNING");
     }
@@ -125,22 +142,13 @@ async function getStatus(auditId: string, projectId: string) {
     throw new AppError("NOT_FOUND", "Audit not found in this project.");
 
   // Self-heal audits whose workflow died without reaching the mark-failed
-  // step (instance terminated, mark-failed itself failed, deploys, ...).
+  // step (instance terminated/errored, instance expired from retention, ...).
   // Without this they stay "running" forever and hold capacity.
-  if (audit.status === "running" && audit.workflowInstanceId) {
-    try {
-      const instance = await env.SITE_AUDIT_WORKFLOW.get(
-        audit.workflowInstanceId,
-      );
-      const { status } = await instance.status();
-      if (status === "errored" || status === "terminated") {
-        await AuditRepository.failAudit(audit.id, audit.workflowInstanceId);
-        audit =
-          (await AuditRepository.getAuditForProject(auditId, projectId)) ??
-          audit;
-      }
-    } catch {
-      // Instance not found or status unavailable — leave the audit as-is.
+  if (audit.status === "running") {
+    const reconciled = await reconcileRunningAudit(audit);
+    if (reconciled) {
+      audit =
+        (await AuditRepository.getAuditForProject(auditId, projectId)) ?? audit;
     }
   }
 
@@ -154,6 +162,7 @@ async function getStatus(auditId: string, projectId: string) {
     lighthouseCompleted: audit.lighthouseCompleted,
     lighthouseFailed: audit.lighthouseFailed,
     currentPhase: audit.currentPhase,
+    errorCode: audit.errorCode,
     startedAt: audit.startedAt,
     completedAt: audit.completedAt,
   };
@@ -257,6 +266,14 @@ async function remove(auditId: string, projectId: string) {
   }
 
   await AuditRepository.deleteAuditForProject(auditId, projectId);
+  // Best-effort: drop the crawl scratchpad DO with the audit (it lives in
+  // the open-seo-audit worker, behind the AuditEngine RPC). A missed destroy
+  // self-cleans via the DO's 7-day alarm.
+  try {
+    await env.AUDIT_ENGINE.destroyScratchpad(auditId);
+  } catch (error) {
+    console.warn(`Failed to destroy audit scratchpad ${auditId}:`, error);
+  }
 }
 
 export const AuditService = {
