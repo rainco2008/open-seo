@@ -8,6 +8,19 @@ import { normalizeGa4Response } from "./Ga4ReportNormalization";
 import { comparisonValue, previousPeriod } from "./Ga4ReportEnhancements";
 import { Ga4ReportError } from "@/server/lib/ga4Errors";
 import { mapGa4ReportError, resolveGa4DateRange } from "./Ga4ReportingService";
+import type { Ga4Channel } from "./Ga4ReportDefinitions";
+import { shiftGa4Date } from "./Ga4Dates";
+
+const TRAFFIC_METRICS = [
+  "totalUsers",
+  "sessions",
+  "screenPageViews",
+  "keyEvents",
+  "newUsers",
+  "engagementRate",
+  "bounceRate",
+  "averageSessionDuration",
+] as const;
 
 type Ga4OrganicOverviewInput = {
   projectId: string;
@@ -19,9 +32,10 @@ type Ga4OrganicOverviewInput = {
 function metricComparison(
   current: Record<string, string | number | null> | null,
   previous: Record<string, string | number | null> | null,
+  metrics: readonly string[],
 ) {
   return Object.fromEntries(
-    OVERVIEW_METRICS.map((metric) => {
+    metrics.map((metric) => {
       const currentValue =
         typeof current?.[metric] === "number" ? current[metric] : null;
       const previousValue =
@@ -64,7 +78,12 @@ function keyEventDiagnostics(
 
 async function getOrganicOverview(
   input: Ga4OrganicOverviewInput,
-  opts: { now?: Date } = {},
+  opts: {
+    now?: Date;
+    channel?: Ga4Channel;
+    metrics?: readonly string[];
+    comparison?: "previous_period" | "previous_week";
+  } = {},
 ) {
   const connection = await Ga4ConnectionRepository.getByProjectId(
     input.projectId,
@@ -80,15 +99,31 @@ async function getOrganicOverview(
     connection.propertyTimeZone,
     opts.now,
   );
-  const previousDateRange = previousPeriod(dateRange.resolvedDateRange);
-  const currentRequest = buildGa4OverviewRequest(dateRange.resolvedDateRange);
+  const previousDateRange =
+    opts.comparison === "previous_week"
+      ? {
+          startDate: shiftGa4Date(dateRange.resolvedDateRange.startDate, -7),
+          endDate: shiftGa4Date(dateRange.resolvedDateRange.endDate, -7),
+        }
+      : previousPeriod(dateRange.resolvedDateRange);
+  const channel = opts.channel ?? "organic_search";
+  const metrics = opts.metrics ?? OVERVIEW_METRICS;
+  const currentRequest = buildGa4OverviewRequest({
+    ...dateRange.resolvedDateRange,
+    channel,
+    metrics,
+  });
   const previousRequest = buildGa4OverviewRequest({
     ...previousDateRange,
+    channel,
+    metrics,
   });
   const trend = input.trend ?? "daily";
   const trendRequest = buildGa4OverviewRequest({
     ...dateRange.resolvedDateRange,
     trend,
+    channel,
+    metrics,
   });
   const client = createGa4DataClient({
     userId: connection.connectedByUserId,
@@ -125,12 +160,12 @@ async function getOrganicOverview(
         previousDateRange,
         propertyTimeZone: connection.propertyTimeZone,
         currencyCode: connection.propertyCurrencyCode,
-        channel: "organic_search" as const,
+        channel,
         trend,
       },
       current: currentSummary,
       previous: previousSummary,
-      comparison: metricComparison(currentSummary, previousSummary),
+      comparison: metricComparison(currentSummary, previousSummary, metrics),
       trend: trendReport.rows,
       diagnostics: keyEventDiagnostics(
         currentSummary,
@@ -154,4 +189,43 @@ async function getOrganicOverview(
   }
 }
 
-export const Ga4OrganicOverviewService = { getOrganicOverview };
+async function getTrafficOverview(
+  input: Ga4OrganicOverviewInput & {
+    channel?: Ga4Channel;
+    comparison?: "previous_period" | "previous_week";
+  },
+  opts: { now?: Date } = {},
+) {
+  const result = await getOrganicOverview(input, {
+    ...opts,
+    channel: input.channel ?? "all",
+    metrics: TRAFFIC_METRICS,
+    comparison: input.comparison,
+  });
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((finding) => ({
+      ...finding,
+      message:
+        "Key events declined sharply compared with the selected comparison period.",
+    })),
+    trafficAlerts:
+      !result.reportMetadata.hasLimitedData &&
+      result.comparison.sessions.previous !== null &&
+      result.comparison.sessions.previous >= 100 &&
+      result.comparison.sessions.percentChange !== null &&
+      Math.abs(result.comparison.sessions.percentChange) >= 0.5
+        ? [
+            {
+              code: "sessions_large_change",
+              message: `Sessions ${result.comparison.sessions.percentChange < 0 ? "fell" : "rose"} by ${Math.abs(result.comparison.sessions.percentChange * 100).toFixed(1)}% compared with the selected comparison period. Check channels, campaigns and measurement before drawing conclusions.`,
+            },
+          ]
+        : [],
+  };
+}
+
+export const Ga4OrganicOverviewService = {
+  getOrganicOverview,
+  getTrafficOverview,
+};

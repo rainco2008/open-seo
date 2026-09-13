@@ -12,6 +12,7 @@ import { TableExportMenu } from "@/client/components/table/TableBulkActionBar";
 import { TablePagination } from "@/client/components/table/TablePagination";
 import { SearchConsoleConnectionCard } from "@/client/features/gsc/SearchConsoleConnectionCard";
 import { SearchPerformanceLoadingState } from "@/client/features/search-performance/SearchPerformanceLoadingState";
+import { SearchDiagnostics } from "@/client/features/search-performance/SearchDiagnostics";
 import {
   DimensionTable,
   exportDimensionRows,
@@ -350,6 +351,7 @@ export function SearchPerformancePage({ projectId }: { projectId: string }) {
                 </>
               )}
             </div>
+            <SearchDiagnostics projectId={projectId} {...filterInput} />
           </>
         )}
       </div>

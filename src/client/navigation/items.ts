@@ -51,6 +51,11 @@ const projectNavItems = [
     icon: GoogleGlyphMuted,
   },
   {
+    to: "/p/$projectId/analytics" as const,
+    label: "Traffic Analytics",
+    icon: TrendingUp,
+  },
+  {
     to: "/p/$projectId/domain" as const,
     label: "Domain Overview",
     icon: Globe,
@@ -126,6 +131,7 @@ export function getProjectNavGroups(projectId: string) {
       label: "My Site",
       items: [
         byPath("/p/$projectId/search-performance"),
+        byPath("/p/$projectId/analytics"),
         byPath("/p/$projectId/rank-tracking"),
         byPath("/p/$projectId/saved"),
         byPath("/p/$projectId/audit"),

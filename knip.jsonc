@@ -11,6 +11,8 @@
     "src/router.tsx",
     "src/routes/**/*.ts",
     "src/routes/**/*.tsx",
+    // Browser-test fixture loaded by e2e/fixtures/analytics-preview.html.
+    "e2e/fixtures/analytics-preview.tsx",
     // Drizzle config (plugin disabled due to cloudflare:workers import issues)
     "drizzle.config.ts",
     "drizzle-pg.config.ts",

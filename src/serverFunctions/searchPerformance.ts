@@ -1,4 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { buildSearchMovers } from "@/server/features/gsc/searchMovers";
 import {
   GscNotConnectedError,
   GscService,
@@ -29,6 +31,49 @@ const COUNTRY_ROW_LIMIT = 25;
 // Export pulls the whole dimension in one shot, capped at GSC's per-call max
 // (GSC_MAX_ROW_LIMIT). Large stores get everything up to this ceiling.
 const EXPORT_ROW_LIMIT = 1000;
+
+export const getSearchMovers = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(
+    searchPerformanceInputSchema.extend({
+      dimension: z.enum(["query", "page"]),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const range = resolveDateRange({ dateRange: data.dateRange });
+    const previous = previousPeriod(range.startDate, range.endDate);
+    const { filters } = buildGscFilters(data);
+    const read = (dates: { startDate: string; endDate: string }) =>
+      GscService.getPerformance({
+        projectId: context.projectId,
+        ...dates,
+        dimensions: [data.dimension],
+        filters,
+        rowLimit: 1000,
+        dataState: "final",
+      });
+    const [now, before] = await Promise.all([read(range), read(previous)]);
+    return {
+      ...buildSearchMovers(now.rows, before.rows, 1000),
+      range,
+      previous,
+    };
+  });
+
+export const inspectSearchUrls = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(
+    z.object({
+      projectId: z.string().min(1),
+      urls: z.array(z.string().url()).min(1).max(10),
+    }),
+  )
+  .handler(({ data, context }) =>
+    GscService.inspectUrls({
+      projectId: context.projectId,
+      urls: [...new Set(data.urls)],
+    }),
+  );
 
 /** Build GSC filter groups shared by every call. Device applies everywhere;
  *  country applies everywhere except the country breakdown itself (so the

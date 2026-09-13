@@ -5,6 +5,7 @@ export type Ga4ReportKind =
   | "landing_pages"
   | "page_performance"
   | "key_events"
+  | "events"
   | "traffic_acquisition"
   | "ecommerce_performance"
   | "site_search"
@@ -19,13 +20,18 @@ type Ga4ReportRequestInput = {
   offset: number;
   includeDate?: boolean;
   breakdown?: "event" | "event_and_landing_page";
-  acquisitionBreakdown?: "channel_group" | "source_medium" | "campaign";
+  acquisitionBreakdown?: "channel_group" | "source_medium" | "campaign" | "utm";
   ecommerceBreakdown?: "item" | "landing_page";
   ecommerceOnlyWithTransactions?: boolean;
-  audienceBreakdown?: "device" | "country" | "new_vs_returning";
+  audienceBreakdown?: "device" | "country" | "new_vs_returning" | "browser";
 };
 
 const REPORT_DEFINITIONS = {
+  events: {
+    dimensions: ["eventName"],
+    metrics: ["eventCount", "totalUsers", "keyEvents"],
+    orderMetric: "eventCount",
+  },
   landing_pages: {
     dimensions: ["hostName", "landingPage"],
     metrics: [
@@ -134,6 +140,15 @@ function reportDimensions(
   defaults: readonly string[],
 ): string[] {
   if (input.kind === "traffic_acquisition") {
+    if (input.acquisitionBreakdown === "utm") {
+      return [
+        "sessionManualSource",
+        "sessionManualMedium",
+        "sessionManualCampaignName",
+        "sessionManualTerm",
+        "sessionManualAdContent",
+      ];
+    }
     return [
       {
         channel_group: "sessionDefaultChannelGroup",
@@ -148,6 +163,7 @@ function reportDimensions(
         device: "deviceCategory",
         country: "country",
         new_vs_returning: "newVsReturning",
+        browser: "browser",
       }[input.audienceBreakdown ?? "device"],
     ];
   }
@@ -229,6 +245,7 @@ function effectiveBreakdown(input: Ga4ReportRequestInput): string {
     return input.includeDate ? "page_and_date" : "page";
   }
   if (input.kind === "key_events") return input.breakdown ?? "event";
+  if (input.kind === "events") return "event";
   if (input.kind === "traffic_acquisition") {
     return input.acquisitionBreakdown ?? "channel_group";
   }
@@ -276,6 +293,8 @@ export function buildGa4OverviewRequest(input: {
   startDate: string;
   endDate: string;
   trend?: "daily" | "weekly";
+  channel?: Ga4Channel;
+  metrics?: readonly string[];
 }): Ga4RunReportRequest {
   const dimensions = input.trend
     ? [{ name: input.trend === "daily" ? "date" : "yearWeek" }]
@@ -283,8 +302,8 @@ export function buildGa4OverviewRequest(input: {
   return {
     dateRanges: [{ startDate: input.startDate, endDate: input.endDate }],
     dimensions,
-    metrics: OVERVIEW_METRICS.map((name) => ({ name })),
-    dimensionFilter: organicFilter(),
+    metrics: (input.metrics ?? OVERVIEW_METRICS).map((name) => ({ name })),
+    dimensionFilter: input.channel === "all" ? undefined : organicFilter(),
     offset: "0",
     limit: input.trend ? "1000" : "1",
     orderBys: input.trend
