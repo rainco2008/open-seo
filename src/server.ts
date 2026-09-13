@@ -26,6 +26,7 @@ import {
 import { sweepDubReferredOrganizations } from "@/server/referrals/dub";
 import { maybeSendSelfHostHeartbeat } from "@/server/lib/self-host-telemetry";
 import { handleGdprStorageErasure } from "@/server/gdpr/storage-erasure";
+import { captureDailyPortfolioMetrics } from "@/server/features/portfolio/services/dailyMetrics";
 import { GDPR_STORAGE_ERASURE_PATH } from "@/shared/gdpr-erasure";
 
 const appFetch = createStartHandler(defaultStreamHandler);
@@ -189,6 +190,7 @@ export { SamChatAgent } from "./server/features/sam/SamChatAgent";
 
 // Daily OAuth KV garbage collection; must match a trigger in wrangler.jsonc.
 const MCP_OAUTH_PURGE_CRON = "17 3 * * *";
+const DAILY_PORTFOLIO_CRON = "30 4 * * *";
 
 export default {
   fetch,
@@ -197,6 +199,10 @@ export default {
     env: Env,
     _ctx: ExecutionContext,
   ) {
+    if (controller.cron === DAILY_PORTFOLIO_CRON) {
+      await withPgClient(() => captureDailyPortfolioMetrics());
+      return;
+    }
     if (controller.cron === MCP_OAUTH_PURGE_CRON) {
       // Only hosted mode runs the OAuth provider (and has OAUTH_KV bound).
       if (isHostedAuthMode(getAuthMode(env.AUTH_MODE))) {

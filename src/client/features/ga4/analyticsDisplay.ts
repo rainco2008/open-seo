@@ -41,6 +41,18 @@ export const reports = {
     kind: "audience_breakdown",
     audienceBreakdown: "new_vs_returning",
   },
+  ecommerceItems: {
+    label: "Ecommerce products",
+    kind: "ecommerce_performance",
+    ecommerceBreakdown: "item",
+  },
+  ecommerceLandingPages: {
+    label: "Ecommerce landing pages",
+    kind: "ecommerce_performance",
+    ecommerceBreakdown: "landing_page",
+    ecommerceOnlyWithTransactions: true,
+  },
+  siteSearch: { label: "Site search", kind: "site_search" },
   events: { label: "Events", kind: "events" },
   conversions: { label: "Key events (conversions)", kind: "key_events" },
 } as const;
@@ -94,6 +106,13 @@ export const labels: Record<string, string> = {
   sessionManualCampaignName: "UTM campaign",
   sessionManualTerm: "UTM term",
   sessionManualAdContent: "UTM content",
+  itemName: "Product",
+  itemId: "Product ID",
+  itemsViewed: "Items viewed",
+  itemsAddedToCart: "Added to cart",
+  itemsPurchased: "Items purchased",
+  itemRevenue: "Item revenue",
+  searchTerm: "Search term",
 };
 
 export function formatValue(

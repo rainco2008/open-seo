@@ -70,11 +70,15 @@ export const getAnalyticsReport = createServerFn({ method: "POST" })
         "events",
         "key_events",
         "traffic_acquisition",
+        "ecommerce_performance",
+        "site_search",
         "audience_breakdown",
       ]),
       acquisitionBreakdown: z
         .enum(["channel_group", "source_medium", "campaign", "utm"])
         .optional(),
+      ecommerceBreakdown: z.enum(["item", "landing_page"]).optional(),
+      ecommerceOnlyWithTransactions: z.boolean().optional(),
       audienceBreakdown: z
         .enum(["device", "country", "browser", "new_vs_returning"])
         .optional(),
