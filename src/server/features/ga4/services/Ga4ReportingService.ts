@@ -35,10 +35,10 @@ export type Ga4ReportInput = {
   channel?: Ga4Channel;
   includeDate?: boolean;
   breakdown?: "event" | "event_and_landing_page";
-  acquisitionBreakdown?: "channel_group" | "source_medium" | "campaign";
+  acquisitionBreakdown?: "channel_group" | "source_medium" | "campaign" | "utm";
   ecommerceBreakdown?: "item" | "landing_page";
   ecommerceOnlyWithTransactions?: boolean;
-  audienceBreakdown?: "device" | "country" | "new_vs_returning";
+  audienceBreakdown?: "device" | "country" | "new_vs_returning" | "browser";
   comparePreviousPeriod?: boolean;
 };
 
