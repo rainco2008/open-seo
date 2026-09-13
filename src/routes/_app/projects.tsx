@@ -12,6 +12,7 @@ import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { getLastProjectId } from "@/client/lib/active-project";
 import { CreateProjectModal } from "@/client/features/projects/CreateProjectModal";
 import { AnalyticsPortfolio } from "@/client/features/ga4/AnalyticsPortfolio";
+import { DailyPortfolio } from "@/client/features/ga4/DailyPortfolio";
 
 export const Route = createFileRoute("/_app/projects")({
   component: ProjectsPage,
@@ -89,6 +90,7 @@ function ProjectsPage() {
         )}
 
         <AnalyticsPortfolio />
+        <DailyPortfolio />
         <ArchivedProjects />
       </div>
 

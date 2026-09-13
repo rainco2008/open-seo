@@ -69,6 +69,7 @@ import {
   runSiteAuditTool,
 } from "@/server/mcp/tools/site-audit-tools";
 import { whoamiTool } from "@/server/mcp/tools/whoami";
+import { getDailyProjectReportTool } from "@/server/mcp/tools/get-daily-project-report";
 
 type ToolSchema = z.ZodType | z.ZodRawShape;
 
@@ -158,6 +159,7 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   ) => registerOpenSeoTool(server, tool, authProps);
 
   register(whoamiTool);
+  register(getDailyProjectReportTool);
   register(listProjectsTool);
   register(createProjectTool);
   register(getProjectContextTool);
