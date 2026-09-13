@@ -140,9 +140,9 @@ codex mcp add openseo --url https://app.openseo.so/mcp --bearer-token-env-var OP
 
 Any other client that supports custom HTTP headers can send `Authorization: Bearer oseo_YOUR_KEY` or `x-api-key: oseo_YOUR_KEY`.
 
-## Available tools
+## Available tool capabilities
 
-OpenSEO MCP exposes tools for SEO research workflows:
+OpenSEO MCP exposes the following capability areas. This is a summary, not the complete tool list:
 
 - Research keywords with volume, difficulty, and CPC.
 - Fetch live Google organic SERP results for keywords.
@@ -163,7 +163,35 @@ OpenSEO MCP exposes tools for SEO research workflows:
 - Check backlink and referring-domain overview data.
 - Read first-party Google Search Console performance (clicks, impressions, CTR, position).
 - Inspect index status, crawl, and canonical for specific URLs (up to 10 per call).
+- Read Google Analytics organic, acquisition, audience, ecommerce, site-search, and measurement-health data.
+- Run site audits and read audit status, issues, and pages.
 - Read and update a project's shared context: business, goal, positioning, writing preferences, competitors, key pages, and a research log (free, no credits).
+
+The currently documented stable build registers 46 tools; the deployed endpoint may
+change independently. For the exact names, input schemas,
+output schemas, and credit notes, connect first and call `tools/list`; the server
+is the source of truth. The current names are:
+
+```text
+whoami, list_projects, create_project, get_project_context,
+update_project_context, list_saved_keywords, save_keywords,
+research_keywords, get_keyword_metrics, get_serp_results,
+find_serp_competitors, get_domain_overview, get_domain_keyword_suggestions,
+get_ranked_keywords, get_backlinks_overview, get_backlinks_profile,
+search_local_businesses, get_local_serp_results, get_google_business_questions,
+get_business_profile, get_business_reviews, get_business_updates,
+list_business_categories, get_local_rank_grid, create_rank_tracker,
+get_rank_tracker, add_rank_tracking_keywords, remove_rank_tracking_keywords,
+estimate_rank_tracker_cost, run_rank_tracker, get_search_console_performance,
+inspect_urls, get_search_opportunities,
+get_google_analytics_organic_landing_pages,
+get_google_analytics_page_performance, get_google_analytics_key_events,
+get_google_analytics_organic_overview, get_google_analytics_traffic_acquisition,
+get_google_analytics_measurement_health,
+get_google_analytics_ecommerce_performance, get_google_analytics_site_search,
+get_google_analytics_audience_breakdown, run_site_audit, get_audit_status,
+get_audit_issues, get_audit_pages
+```
 
 ## What to do after setup
 
