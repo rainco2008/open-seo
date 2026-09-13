@@ -30,13 +30,11 @@ const rangeSchema = z.object({
 export const getAnalyticsPortfolio = createServerFn({ method: "POST" })
   .middleware(requireAuthenticatedContext)
   .validator(
-    rangeSchema
-      .omit({ projectId: true, channel: true })
-      .extend({
-        comparison: z
-          .enum(["previous_period", "previous_week"])
-          .default("previous_period"),
-      }),
+    rangeSchema.omit({ projectId: true, channel: true }).extend({
+      comparison: z
+        .enum(["previous_period", "previous_week"])
+        .default("previous_period"),
+    }),
   )
   .handler(({ data, context }) =>
     Ga4PortfolioService.getPortfolio(context.organizationId, data),

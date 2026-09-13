@@ -91,8 +91,16 @@ describe("traffic analytics", () => {
   });
 
   it("compares yesterday with the same weekday when requested", async () => {
-    const result = await Ga4OrganicOverviewService.getTrafficOverview({ projectId: "project_1", startDate: "2026-09-10", endDate: "2026-09-10", comparison: "previous_week" });
-    expect(result.request.previousDateRange).toEqual({ startDate: "2026-09-03", endDate: "2026-09-03" });
+    const result = await Ga4OrganicOverviewService.getTrafficOverview({
+      projectId: "project_1",
+      startDate: "2026-09-10",
+      endDate: "2026-09-10",
+      comparison: "previous_week",
+    });
+    expect(result.request.previousDateRange).toEqual({
+      startDate: "2026-09-03",
+      endDate: "2026-09-03",
+    });
   });
 
   it("distinguishes ordinary events, manual attribution and browser reports", () => {
